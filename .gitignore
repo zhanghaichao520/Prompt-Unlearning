@@ -1,0 +1,15 @@
+# 忽略日志文件
+*.log
+logs/
+output.log
+
+# 忽略模型参数文件
+*.pth
+*.pt
+saved/
+
+scif_data/
+log/
+logs/
+datasets/
+log_*
