@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
-
+import json
 from recbole.config import Config
 from recbole.data import create_dataset, data_preparation
 from recbole.utils import init_seed, init_logger, get_model, get_trainer
@@ -198,6 +198,107 @@ class SCIF_Unlearner:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         torch.save(self.model.state_dict(), save_path)
 
+
+# ------------------------------------------------------------
+# 5. 修复的 Forget Set 评估函数 - 正确的实现
+# ------------------------------------------------------------
+def correct_evaluate_on_forget_set(model, forget_data, n_items, config, model_name, device, batch_size=1000):
+    """
+    正确的forget set评估：
+    对每个forget用户，在所有物品中计算topk推荐，
+    然后看这些推荐中有多少是forget集中的物品
+    
+    这才是正确的遗忘效果评估方式
+    """
+    print(f"\n=== {model_name} Correct Eval on Forget Set ===")
+    
+    model.eval()
+    model = model.to(device)
+    
+    # 确保图相关组件在正确设备上
+    if hasattr(model, 'norm_adj_matrix'):
+        model.norm_adj_matrix = model.norm_adj_matrix.to(device)
+    
+    # 构建forget集合：{user: set(forget_items)}
+    forget_dict = {}
+    for _, row in forget_data.iterrows():
+        user, item, label = int(row['user']), int(row['item']), int(row['label'])
+        if label == 1:  # 只考虑正样本
+            if user not in forget_dict:
+                forget_dict[user] = set()
+            forget_dict[user].add(item)
+    
+    if not forget_dict:
+        print("No positive forget samples found!")
+        return {f'{metric}@{k}': 0.0 for k in config["topk"] for metric in ['hit', 'ndcg', 'recall']}
+    
+    results = {}
+    
+    with torch.no_grad():
+        for k in config["topk"]:
+            hits, ndcgs, recalls = [], [], []
+            
+            # 对每个forget用户进行评估
+            for user in tqdm(forget_dict.keys(), desc=f"Evaluating @{k}", leave=False):
+                forget_items = forget_dict[user]
+                
+                # 计算该用户对所有物品的分数
+                all_items = torch.arange(n_items, dtype=torch.long, device=device)
+                users_tensor = torch.full((n_items,), user, dtype=torch.long, device=device)
+                
+                # 分批处理以避免内存问题
+                scores = []
+                for i in range(0, n_items, batch_size):
+                    end_idx = min(i + batch_size, n_items)
+                    batch_users = users_tensor[i:end_idx]
+                    batch_items = all_items[i:end_idx]
+                    
+                    inter = {
+                        model.USER_ID: batch_users,
+                        model.ITEM_ID: batch_items
+                    }
+                    batch_scores = model.predict(inter)
+                    scores.append(batch_scores)
+                
+                all_scores = torch.cat(scores, dim=0)
+                
+                # 获取topk推荐
+                _, topk_indices = torch.topk(all_scores, k)
+                topk_items = topk_indices.cpu().numpy()
+                
+                # 计算指标
+                # Hit@k: topk中是否有forget物品
+                hit_count = sum(1 for item in topk_items if item in forget_items)
+                hit = 1.0 if hit_count > 0 else 0.0
+                hits.append(hit)
+                
+                # Recall@k: topk中的forget物品数量 / 总forget物品数量
+                recall = hit_count / len(forget_items)
+                recalls.append(recall)
+                
+                # NDCG@k
+                dcg = 0.0
+                for i, item in enumerate(topk_items):
+                    if item in forget_items:
+                        dcg += 1.0 / np.log2(i + 2)
+                
+                # 理想情况下的DCG（所有forget物品都在最前面）
+                idcg = 0.0
+                for i in range(min(len(forget_items), k)):
+                    idcg += 1.0 / np.log2(i + 2)
+                
+                ndcg = dcg / idcg if idcg > 0 else 0.0
+                ndcgs.append(ndcg)
+            
+            # 计算平均值
+            results[f'hit@{k}'] = np.mean(hits) if hits else 0.0
+            results[f'ndcg@{k}'] = np.mean(ndcgs) if ndcgs else 0.0
+            results[f'recall@{k}'] = np.mean(recalls) if recalls else 0.0
+            
+            print(f"Hit@{k}:{results[f'hit@{k}']:.6f}, NDCG@{k}:{results[f'ndcg@{k}']:.6f}, Recall@{k}:{results[f'recall@{k}']:.6f}")
+    
+    return results
+
 # ------------------------------------------------------------
 # 5. 主流程：训练 → SCIF → ZRF → 评估
 # ------------------------------------------------------------
@@ -294,7 +395,110 @@ def train_and_unlearn(args):
         print(f"Hit@{k}:{res2[f'hit@{k}']:.6f}, "
               f"NDCG@{k}:{res2[f'ndcg@{k}']:.6f}, "
               f"Recall@{k}:{res2[f'recall@{k}']:.6f}")
-    print(f">> SCIF end time: {time.time()-t0:.2f}s")
+    
+    # 获取物品总数（用于 forget set 评估）
+    n_items = dataset_full.item_num
+
+   # 6.9 使用正确的方法在forget集上评估
+    print(f"\n=== Forget Set Evaluation (Correct Method) ===")
+    
+    # 原始模型在forget集上的评估
+    original_forget_results = correct_evaluate_on_forget_set(
+        model, tr, n_items, config, "Pre-Unlearn (Original)", device
+    )
+    
+    # Unlearn模型在forget集上的评估
+    unlearn_forget_results = correct_evaluate_on_forget_set(
+        model_un, tr, n_items, config, "Post-Unlearn (SCIF)", device
+    )
+    
+    # 6.10 总结所有关键指标
+    print(f"\n" + "="*60)
+    print(f"COMPREHENSIVE EVALUATION SUMMARY")
+    print(f"="*60)
+    print(f"ZRF Score: {zrf:.6f}")
+    print(f"\nTest Set Performance (Utility Preservation):")
+    print(f"{'-'*50}")
+    for k in config["topk"]:
+        print(f"  Hit@{k}:    {res1[f'hit@{k}']:.6f} -> {res2[f'hit@{k}']:.6f} (Δ: {res2[f'hit@{k}']-res1[f'hit@{k}']:+.6f})")
+        print(f"  NDCG@{k}:   {res1[f'ndcg@{k}']:.6f} -> {res2[f'ndcg@{k}']:.6f} (Δ: {res2[f'ndcg@{k}']-res1[f'ndcg@{k}']:+.6f})")
+        print(f"  Recall@{k}: {res1[f'recall@{k}']:.6f} -> {res2[f'recall@{k}']:.6f} (Δ: {res2[f'recall@{k}']-res1[f'recall@{k}']:+.6f})")
+        if k != config["topk"][-1]:
+            print()
+    
+    print(f"\nForget Set Performance (Forgetting Effectiveness):")
+    print(f"{'-'*50}")
+    for k in config["topk"]:
+        orig_hit, unlearn_hit = original_forget_results[f'hit@{k}'], unlearn_forget_results[f'hit@{k}']
+        orig_ndcg, unlearn_ndcg = original_forget_results[f'ndcg@{k}'], unlearn_forget_results[f'ndcg@{k}']
+        orig_recall, unlearn_recall = original_forget_results[f'recall@{k}'], unlearn_forget_results[f'recall@{k}']
+        
+        print(f"  Hit@{k}:    {orig_hit:.6f} -> {unlearn_hit:.6f} (Δ: {unlearn_hit-orig_hit:+.6f})")
+        print(f"  NDCG@{k}:   {orig_ndcg:.6f} -> {unlearn_ndcg:.6f} (Δ: {unlearn_ndcg-orig_ndcg:+.6f})")
+        print(f"  Recall@{k}: {orig_recall:.6f} -> {unlearn_recall:.6f} (Δ: {unlearn_recall-orig_recall:+.6f})")
+        if k != config["topk"][-1]:
+            print()
+    
+    # 6.11 性能评估总结
+    print(f"\nPerformance Analysis:")
+    print(f"{'-'*50}")
+    
+    # 计算平均性能保持率（测试集）
+    test_preserve_rates = []
+    for k in config["topk"]:
+        for metric in ['hit', 'ndcg', 'recall']:
+            if res1[f'{metric}@{k}'] > 0:
+                preserve_rate = res2[f'{metric}@{k}'] / res1[f'{metric}@{k}']
+                test_preserve_rates.append(preserve_rate)
+    avg_test_preserve = np.mean(test_preserve_rates) if test_preserve_rates else 0
+    print(f"  Average Test Performance Preservation: {avg_test_preserve:.2%}")
+    
+    # 计算平均遗忘率（forget集）
+    forget_rates = []
+    for k in config["topk"]:
+        for metric in ['hit', 'ndcg', 'recall']:
+            orig_val = original_forget_results[f'{metric}@{k}']
+            unlearn_val = unlearn_forget_results[f'{metric}@{k}']
+            if orig_val > 0:
+                forget_rate = 1 - (unlearn_val / orig_val)
+                forget_rates.append(forget_rate)
+            else:
+                # 如果原始值为0，但unlearn后仍为0，这是好事
+                if unlearn_val == 0:
+                    forget_rates.append(1.0)  # 完全遗忘
+    avg_forget_rate = np.mean(forget_rates) if forget_rates else 0
+    print(f"  Average Forget Performance Degradation: {avg_forget_rate:.2%}")
+    
+    print(f"  ZRF Score (Higher is Better): {zrf:.6f}")
+    
+    # 6.12 保存结果到文件
+    results_summary = {
+        'model': args.model,
+        'dataset': ds,
+        'scif_params': {
+            'if_epoch': args.if_epoch,
+            'if_lr': args.if_lr
+        },
+        'zrf_score': float(zrf),
+        'test_original': {f"{metric}@{k}": float(res1[f'{metric}@{k}']) for k in config["topk"] for metric in ['hit', 'ndcg', 'recall']},
+        'test_unlearned': {f"{metric}@{k}": float(res2[f'{metric}@{k}']) for k in config["topk"] for metric in ['hit', 'ndcg', 'recall']},
+        'forget_original': {k: float(v) for k, v in original_forget_results.items()},
+        'forget_unlearned': {k: float(v) for k, v in unlearn_forget_results.items()},
+        'summary_metrics': {
+            'avg_test_preserve_rate': float(avg_test_preserve),
+            'avg_forget_rate': float(avg_forget_rate),
+            'total_time_seconds': float(time.time() - t0)
+        }
+    }
+    
+    results_file = f"./results/{ds}_{args.model}_scif_results.json"
+    os.makedirs(os.path.dirname(results_file), exist_ok=True)
+    with open(results_file, 'w') as f:
+        json.dump(results_summary, f, indent=2)
+    print(f"\nDetailed results saved to: {results_file}")
+    
+    print(f">> Total SCIF execution time: {time.time()-t0:.2f}s")
+    print(f"="*60)
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--model","-m",default="LightGCN")

@@ -13,3 +13,6 @@ log/
 logs/
 datasets/
 log_*
+.vscode/
+pretrain_checkpoints/
+unlearning_checkpoints/
