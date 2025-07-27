@@ -12,7 +12,7 @@
 ### 运行方式
 
 ```bash
-python train_lightgcn.py
+python P2F/train_lightgcn.py
 ```
 
 ### 参数设置
@@ -42,7 +42,7 @@ k_list = [10, 20]                   # 评估的k值
 请运行如下命令：
 
 ```bash
-python train_lightgcn.py
+python P2F/train_lightgcn.py
 ```
 
 训练完成后，会在`LIGHTGCN_CONFIG['save_path']`指定的路径（如`./saved/lightgcn.pth`）保存预训练模型权重。
@@ -91,7 +91,7 @@ UNLEARNING_CONFIG = {
 确保`train_lightgcn.py`已训练并保存了基础模型，然后运行：
 
 ```bash
-python unlearning.py
+python P2F/unlearning.py
 ```
 
 该脚本会自动：
