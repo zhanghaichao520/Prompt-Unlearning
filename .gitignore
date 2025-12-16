@@ -17,3 +17,6 @@ log_*
 pretrain_checkpoints/
 unlearning_checkpoints/
 results/
+DS_Store
+.DS_Store
+**/.DS_Store
