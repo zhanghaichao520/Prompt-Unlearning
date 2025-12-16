@@ -1,74 +1,50 @@
 import matplotlib.pyplot as plt
+import seaborn as sns
 import numpy as np
 
-colors = ['#576fa0', '#a7b9d7']  # PGP, Ours
-# colors = ['#b57979', '#dea3a2']  # PGP, Ours
+# 假设你已经通过模型计算出了三组分数
+# scores_pos = model.predict(test_positive_edges)
+# scores_neg = model.predict(random_negative_edges)
+# scores_unlearn = model.predict(unlearning_target_edges)
 
-# 示例数据（均为0–100）
-first1 = [
-    [[30, 69], [10, 38], [36, 64], [47, 70]],  # 第一行 4组
-    [[30, 39], [10, 16], [36, 44], [47, 52]]   # 第二行 4组
-]
-first2 = [
-    [[35, 52], [31, 47]],  # 第一行 2组
-    [[35, 44], [31, 39]]   # 第二行 2组
-]
-second1 = [
-    [[30, 62], [10, 26], [36, 50], [47, 61]],  # 第一行 4组
-    [[30, 56], [10, 32], [36, 58], [47, 59]]   # 第二行 4组
-]
-second2 = [
-    [[35, 41], [31, 35]],  # 第一行 2组
-    [[35, 42], [31, 36]]   # 第二行 2组
-]
-x_label1 = ['Cube', 'Bimanual',
-          'Can', 'Square']
-x_label2 = ['RealMan', 'Agibot']
-# 创建 2×4 子图
-fig, axs = plt.subplots(
-    2, 4,
-    figsize=(12, 6),
-    dpi=300,
-    gridspec_kw={'width_ratios': [3, 2, 3, 2], 'wspace': 0.2, 'hspace': 0.2}
-)
+# 这里模拟一些数据方便你理解
+np.random.seed(42)
+scores_pos = np.random.normal(loc=8.0, scale=1.5, size=1000)   # 正样本分数高
+scores_neg = np.random.normal(loc=-2.0, scale=1.5, size=1000)  # 负样本分数低
 
-def plot_grouped(ax, vals, x_label, narrow=False):
-    n = len(vals)
-    width = 0.4 if not narrow else 0.24
-    x = np.arange(n)
-    for i, (pgp, ours) in enumerate(vals):
-        # PGP
-        rect1 = ax.bar(x[i] - width/2, pgp, width=width, color=colors[0], label='ACT' if i == 0 else "")
-        # Ours
-        rect2 = ax.bar(x[i] + width/2, ours, width=width, color=colors[1], label='RSAM-ACT' if i == 0 else "")
-        # 显示数值
-        for rect in [rect1, rect2]:
-            for bar in rect:
-                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 2,
-                        f'{bar.get_height():.0f}', ha='center', va='bottom', fontsize=8)
+# 情况A：遗忘前 (Before Unlearning) - 遗忘目标看起来像正样本
+scores_unlearn_before = np.random.normal(loc=7.5, scale=1.5, size=200)
 
-    # ax.set_title(title, fontsize=12)
-    ax.set_xticks(x)
-    ax.set_xticklabels(x_label, fontsize=10)
-    ax.set_ylim(0, 100)
-    ax.grid(axis='y', linestyle='--', alpha=0.6)
-    ax.tick_params(labelsize=10)
+# 情况B：遗忘后 (After Unlearning) - 遗忘目标应该看起来像负样本
+scores_unlearn_after = np.random.normal(loc=-1.8, scale=1.5, size=200)
 
-# 第一行
-plot_grouped(axs[0, 0], first1[0], x_label1, narrow=False)
-plot_grouped(axs[0, 1], first2[0], x_label2, narrow=True)
-plot_grouped(axs[0, 2], first1[1], x_label1, narrow=False)
-plot_grouped(axs[0, 3], first2[1], x_label2, narrow=True)
+print(scores_pos.shape, scores_neg.shape, scores_unlearn_before.shape, scores_unlearn_after.shape)
+print(type(scores_pos), type(scores_neg), type(scores_unlearn_before), type(scores_unlearn_after))
+print(scores_pos[:5], scores_neg[:5], scores_unlearn_before[:5], scores_unlearn_after[:5])
+def plot_distribution(pos, neg, unlearn, title):
+    plt.figure(figsize=(8, 5))
+    
+    # 绘制 Positive Edges (蓝色)
+    sns.kdeplot(pos, fill=True, color='blue', label='Positive Edges', alpha=0.3)
+    
+    # 绘制 Negative Edges (绿色)
+    sns.kdeplot(neg, fill=True, color='green', label='Negative Edges', alpha=0.3)
+    
+    # 绘制 Unlearning Edges (橙色)
+    sns.kdeplot(unlearn, fill=True, color='orange', label='Unlearned/Adversarial Edges', alpha=0.5)
+    
+    # 添加均值虚线 (参考论文图示)
+    plt.axvline(np.mean(pos), color='blue', linestyle='--', alpha=0.6)
+    plt.axvline(np.mean(neg), color='green', linestyle='--', alpha=0.6)
+    plt.axvline(np.mean(unlearn), color='orange', linestyle='--', alpha=0.6)
 
-# 第二行
-plot_grouped(axs[1, 0], second1[0], x_label1, narrow=False)
-plot_grouped(axs[1, 1], second2[0], x_label2, narrow=True)
-plot_grouped(axs[1, 2], second1[1], x_label1, narrow=False)
-plot_grouped(axs[1, 3], second2[1], x_label2, narrow=True)
+    plt.title(title)
+    plt.xlabel('Link Prediction Score')
+    plt.ylabel('Probability Density')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.show()
 
-# 图例
-axs[0, 0].legend(fontsize=10, loc='upper center', frameon=False)
-
-# plt.tight_layout()
-plt.savefig("grouped_subplots_with_values.pdf", bbox_inches='tight')
-# plt.show()
+# 模拟画图
+plot_distribution(scores_pos, scores_neg, scores_unlearn_before, "Distribution Before Unlearning")
+plot_distribution(scores_pos, scores_neg, scores_unlearn_after, "Distribution After Unlearning (Ours)")
