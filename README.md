@@ -1,3 +1,9 @@
+<div align="center">
+  <h1>DPU: Distilled Prompt Tuning for Efficient GNN-based Recommendation Unlearning</h1>
+</div>
+
+---
+
 ## 使用方法
 
 ### 环境要求
