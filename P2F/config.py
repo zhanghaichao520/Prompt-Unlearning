@@ -6,7 +6,7 @@ dataset_name="ml-1m"
 # 通用配置
 COMMON_CONFIG = {
     # 数据集路径
-    'data_path': f"dataset/{dataset_name}.inter",
+    'data_path': f"../dataset/{dataset_name}.inter",
     
     # 随机种子
     'seed': 42,

@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # ====== 配置区域 ======
-titles = ['ML-1M', 'Amazon', 'Netflix']
+titles = ['ML-1M',  'Netflix']
 
 # 每组 6 个值（真实数据时直接替换这里）
 data = [
@@ -11,12 +11,12 @@ data = [
     # [33, 50, 58, 52, 60]
 ]
 
-x_labels = ['Retrain', 'SISA',  'RecEraser', 'SCIF', 'P2F']
+x_labels = ['Retrain', 'SISA',  'RecEraser', 'SCIF', 'DPU']
 colors = ['#576fa0', '#a7b9d7', '#2ca02c', '#ff6347']  # 使用最后一个颜色 (#ff6347) 作为不同的颜色
 
 model_param = [
     [9992.0, 5994.0, 999.0, 100.0, 70.0],
-    [744551.0, 446730.59375, 74455.09375, 7444.0, 100.0],
+    # [744551.0, 446730.59375, 74455.09375, 7444.0, 100.0],
     [497959.0, 298775.390625, 49795.890625, 578.0, 100.0]
 ]
 
@@ -99,5 +99,5 @@ for i, ax in enumerate(axs):
     #     ax2.tick_params(axis='y', labelsize=15)
 
 plt.tight_layout()
-plt.savefig("/Users/hebert/Desktop/efficiency.pdf", bbox_inches='tight')
+plt.savefig("efficiency.pdf", bbox_inches='tight')
 # plt.show()
