@@ -4,69 +4,69 @@
 
 ---
 
-## 使用方法
+## Usage
 
-### 环境要求
+### Environment Requirements
 
-- Python 3.6+
-- PyTorch 1.0+
-- NumPy
-- Pandas
-- SciPy
-- scikit-learn
+* Python 3.6+
+* PyTorch 1.0+
+* NumPy
+* Pandas
+* SciPy
+* scikit-learn
 
-### 运行方式
+### Running Method
 
 ```bash
 python P2F/train_lightgcn.py
 ```
 
-### 参数设置
+### Parameter Settings
 
-主要参数在`main`函数中设置：
+The main parameters are set in the `main` function:
 
 ```python
-# 参数设置
-data_path = "dataset/ml-100k.inter"  # 数据集路径
-embedding_size = 64                 # 嵌入维度
-n_layers = 3                        # 图卷积层数
-reg_weight = 1e-4                   # 正则化权重
-batch_size = 2048                   # 批次大小
-lr = 0.001                          # 学习率
-epochs = 100                        # 训练轮数
-eval_freq = 5                       # 评估频率
-k_list = [10, 20]                   # 评估的k值
+# Parameter settings
+data_path = "dataset/ml-100k.inter"  # Dataset path
+embedding_size = 64                 # Embedding dimension
+n_layers = 3                        # Number of graph convolution layers
+reg_weight = 1e-4                   # Regularization weight
+batch_size = 2048                   # Batch size
+lr = 0.001                          # Learning rate
+epochs = 100                        # Number of training epochs
+eval_freq = 5                       # Evaluation frequency
+k_list = [10, 20]                   # k values for evaluation
 ```
 
 ---
 
-## 遗忘学习（Unlearning）功能说明
+## Unlearning Function Description
 
-### 1. 预训练LightGCN模型
+### 1. Pretrain the LightGCN Model
 
-在进行unlearning之前，需先训练好基础LightGCN模型。  
-请运行如下命令：
+Before performing unlearning, the base LightGCN model needs to be trained first.
+Please run the following command:
 
 ```bash
 python P2F/train_lightgcn.py
 ```
 
-训练完成后，会在`LIGHTGCN_CONFIG['save_path']`指定的路径（如`./saved/lightgcn.pth`）保存预训练模型权重。
+After training is complete, the pretrained model weights will be saved to the path specified by `LIGHTGCN_CONFIG['save_path']`, such as `./saved/lightgcn.pth`.
 
-#### 主要参数设置（见`config.py`）：
+#### Main Parameter Settings See `config.py`:
 
-- `data_path`：数据集路径（如`dataset/ml-100k.inter`）
-- `embedding_size`：嵌入维度
-- `n_layers`：GCN层数
-- `reg_weight`：L2正则化权重
-- `batch_size`：训练批次大小
-- `lr`：学习率
-- `epochs`：训练轮数
-- `save_path`：模型保存路径
+* `data_path`: Dataset path, such as `dataset/ml-100k.inter`
+* `embedding_size`: Embedding dimension
+* `n_layers`: Number of GCN layers
+* `reg_weight`: L2 regularization weight
+* `batch_size`: Training batch size
+* `lr`: Learning rate
+* `epochs`: Number of training epochs
+* `save_path`: Model save path
 
-### 2. 配置Unlearning参数
+### 2. Configure Unlearning Parameters
 
-在`config.py`中，设置unlearning相关参数（`UNLEARNING_CONFIG`），如：
+In `config.py`, set the parameters related to unlearning `UNLEARNING_CONFIG`, such as:
 
 ```python
 UNLEARNING_CONFIG = {
@@ -76,12 +76,12 @@ UNLEARNING_CONFIG = {
     'batch_size': 2048,
     'lr': 0.001,
     'epochs': 30,
-    'forget_ratio': 0.1,         # 遗忘集比例
-    'remain_ratio': 1.0,         # 保留集采样比例
-    'prompt_type': 'attention',  # 提示类型
-    'p_num': 50,                 # prompt数量
+    'forget_ratio': 0.1,         # Ratio of the forget set
+    'remain_ratio': 1.0,         # Sampling ratio of the retain set
+    'prompt_type': 'attention',  # Prompt type
+    'p_num': 50,                 # Number of prompts
     'KL_temperature': 1.0,
-    'loss_type': 'WRD',          # 损失类型（如'KL', 'WRD', 'DAD'等）
+    'loss_type': 'WRD',          # Loss type, such as 'KL', 'WRD', 'DAD', etc.
     'alpha': 0.5,
     'lamda': 10.0,
     'mu': 5.0,
@@ -92,24 +92,25 @@ UNLEARNING_CONFIG = {
 }
 ```
 
-### 3. 运行Unlearning流程
+### 3. Run the Unlearning Process
 
-确保`train_lightgcn.py`已训练并保存了基础模型，然后运行：
+Make sure that `train_lightgcn.py` has trained and saved the base model, then run:
 
 ```bash
 python P2F/unlearning.py
 ```
 
-该脚本会自动：
-- 加载数据和预训练模型
-- 按`forget_ratio`划分遗忘集和保留集
-- 只训练提示（prompt）参数，基础模型参数保持不变
-- 训练过程中自动评估遗忘集和保留集性能
-- 保存训练好的prompt参数到`prompt_save_path`
+This script will automatically:
 
-### 4. 推理与评估
+* Load the data and pretrained model
+* Split the forget set and retain set according to `forget_ratio`
+* Train only the prompt parameters, while keeping the base model parameters unchanged
+* Automatically evaluate the performance on the forget set and retain set during training
+* Save the trained prompt parameters to `prompt_save_path`
 
-推理时，只需加载基础模型和训练好的prompt参数：
+### 4. Inference and Evaluation
+
+During inference, simply load the base model and the trained prompt parameters:
 
 ```python
 from unlearning import load_prompt_for_inference
@@ -118,42 +119,45 @@ prompted_model = load_prompt_for_inference(
 )
 ```
 
-可用`evaluate_unlearning`函数分别评估遗忘集和保留集的推荐性能。
+The `evaluate_unlearning` function can be used to evaluate the recommendation performance on the forget set and retain set separately.
 
 ---
 
-## 实现细节
+## Implementation Details
 
-1. **数据处理**：
-   - 将原始数据转换为用户-物品交互矩阵
-   - 按用户划分训练集和测试集
-   - 为每个正样本生成负样本
+1. **Data Processing**:
 
-2. **模型训练**：
-   - 使用Adam优化器
-   - 采用BPR损失函数
-   - 定期评估模型性能
+   * Convert the raw data into a user-item interaction matrix
+   * Split the training set and test set by user
+   * Generate negative samples for each positive sample
 
-3. **模型评估**：
-   - 对每个测试用户，预测所有物品的评分
-   - 排除训练集中已交互的物品
-   - 计算TopK推荐的各项指标
+2. **Model Training**:
 
----
+   * Use the Adam optimizer
+   * Use the BPR loss function
+   * Periodically evaluate model performance
 
-## 常见问题
+3. **Model Evaluation**:
 
-- **预训练模型未找到？**  
-  请先运行`train_lightgcn.py`，确保`LIGHTGCN_CONFIG['save_path']`路径下有模型权重文件。
-
-- **如何调整遗忘比例？**  
-  修改`UNLEARNING_CONFIG['forget_ratio']`，如`0.1`表示10%样本为遗忘集。
-
-- **如何切换损失函数？**  
-  修改`UNLEARNING_CONFIG['loss_type']`，支持`KL`、`WRD`、`DAD`等。
+   * For each test user, predict scores for all items
+   * Exclude items already interacted with in the training set
+   * Calculate various metrics for TopK recommendations
 
 ---
 
-## 参考文献
+## FAQ
+
+* **Pretrained model not found?**
+  Please run `train_lightgcn.py` first and make sure that a model weight file exists under the path specified by `LIGHTGCN_CONFIG['save_path']`.
+
+* **How to adjust the forget ratio?**
+  Modify `UNLEARNING_CONFIG['forget_ratio']`, for example, `0.1` means that 10% of samples are used as the forget set.
+
+* **How to switch the loss function?**
+  Modify `UNLEARNING_CONFIG['loss_type']`, which supports `KL`, `WRD`, `DAD`, etc.
+
+---
+
+## References
 
 Xiangnan He et al. "LightGCN: Simplifying and Powering Graph Convolution Network for Recommendation." in SIGIR 2020.
